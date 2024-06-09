@@ -29,7 +29,7 @@ var MessageType = {
 
 var getGenesisBlock = () => {
     return new Block(0, "0", 1682839690, "RUT-MIIT first block",
-        "8d9d5a7ff4a78042ea6737bf59c772f8ed27ef3c9b576eac1976c91aaf48d2de", 0, 0);
+        "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e", 0, 0);
 };
 
 var blockchain = [getGenesisBlock()];
@@ -39,7 +39,6 @@ var initHttpServer = () => {
     app.use(bodyParser.json());
     app.get('/blocks', (req, res) => res.send(JSON.stringify(blockchain)));
     app.post('/mineBlock', (req, res) => {
-        //var newBlock = generateNextBlock(req.body.data);
         var newBlock = mineBlock(req.body.data);
         addBlock(newBlock);
         broadcast(responseLatestMsg());
@@ -57,6 +56,7 @@ var initHttpServer = () => {
     app.listen(http_port, () => console.log('Listening http on port: ' +
         http_port));
 };
+
 var mineBlock = (blockData) => {
     var previousBlock = getLatestBlock();
     var nextIndex = previousBlock.index + 1;
@@ -64,8 +64,7 @@ var mineBlock = (blockData) => {
     var nextTimestamp = new Date().getTime() / 1000;
     var nextHash = calculateHash(nextIndex, previousBlock.hash, nextTimestamp,
         blockData, nonce);
-    while (nextHash.substring(0, difficulty) !== Array(difficulty +
-            1).join("0")) {
+    while (!isValidHash(nextHash, difficulty)) {
         nonce++;
         nextTimestamp = new Date().getTime() / 1000;
         nextHash = calculateHash(nextIndex, previousBlock.hash,
@@ -80,6 +79,19 @@ var mineBlock = (blockData) => {
     return new Block(nextIndex, previousBlock.hash, nextTimestamp, blockData,
         nextHash, difficulty, nonce);
 }
+var isValidHash = (hash, difficulty) => {
+    for (var i = 0; i < hash.length - 2; i+= 3) {
+        var num1 = parseInt(hash[i], 16);
+        var num2 = parseInt(hash[i + 1], 16);
+        var num3 = parseInt(hash[i + 2], 16);
+
+        if (Math.pow(num1, difficulty) + Math.pow(num2, difficulty) <= Math.pow(num3, difficulty)) {
+            return false;
+        }
+    }
+    return true;
+};
+
 
 var initP2PServer = () => {
     var server = new WebSocket.Server({
@@ -156,26 +168,15 @@ var handleBlockchainResponse = (message) => {
         console.log('received blockchain is not longer than current blockchain. Do nothing');
     }
 };
-
-
-var generateNextBlock = (blockData) => {
-    var previousBlock = getLatestBlock();
-    var nextIndex = previousBlock.index + 1;
-    var nextTimestamp = new Date().getTime() / 1000;
-    var nextHash = calculateHash(nextIndex, previousBlock.hash, nextTimestamp,
-        blockData);
-    return new Block(nextIndex, previousBlock.hash, nextTimestamp, blockData,
-        nextHash);
-};
 var calculateHashForBlock = (block) => {
     return calculateHash(block.index, block.previousHash, block.timestamp,
         block.data, block.nonce);
 };
 
 var calculateHash = (index, previousHash, timestamp, data, nonce) => {
-    return CryptoJS.SHA256(index + previousHash + timestamp + data +
-        nonce).toString();
+    return CryptoJS.SHA512(index + previousHash + timestamp + data + nonce).toString();
 };
+
 var addBlock = (newBlock) => {
     if (isValidNewBlock(newBlock, getLatestBlock())) {
         blockchain.push(newBlock);
@@ -220,9 +221,6 @@ var isValidChain = (blockchainToValidate) => {
     }
     return true;
 };
-
-
-
 
 var getLatestBlock = () => blockchain[blockchain.length - 1];
 var queryChainLengthMsg = () => ({
